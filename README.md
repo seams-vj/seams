@@ -11,15 +11,12 @@ the seams of its query and from the closest vector its tree parent visited (soft
 answer without a distance computation when θ is below the distance r₁ of the nearest seam, and maintenance rounds
 rerun Build for the rows that inserts and deletes of Y made stale and for new queries.
 
-The repository holds our method only. The baselines of the paper and the SEAMS+INLJ variant (seams without work
-sharing) are not included.
-
 ## Build
 
-Requirements: Linux on x86-64 with AVX2 and FMA, g++ with C++17 and OpenMP (the paper used GCC 11.4.0) and make.
-`bin/updates` and `bin/vamana` also need git, the Boost headers (DiskANN includes `boost/dynamic_bitset.hpp`) and
-network access on the first build, which downloads DiskANN into `third_party/DiskANN` and applies
-`third_party/diskann.patch` (`third_party/fetch_diskann.sh`).
+Requirements: Linux on x86-64 with AVX2 and FMA, g++ with C++17 (the paper used GCC 11.4.0) and make.
+`bin/updates` and `bin/vamana` also need OpenMP, git, the Boost headers (DiskANN includes
+`boost/dynamic_bitset.hpp`) and network access on the first build, which downloads DiskANN into
+`third_party/DiskANN` and applies `third_party/diskann.patch` (`third_party/fetch_diskann.sh`).
 
     make                              # bin/build_seams bin/join bin/updates bin/vamana
     make bin/build_seams bin/join     # the static join only, without DiskANN
@@ -28,12 +25,12 @@ The Makefile uses the compiler flags of the paper's binaries, including `-march=
 
 ## Programs
 
-| program | what it does | paper |
+| program | what it does | in the paper |
 |---|---|---|
-| `build_seams` | Build: top-k search per query, Profile, Select; writes the seam table and the radius file | input of every join of our method; Fig. 10, build cost and coverage (Sec. VII-D) |
-| `join` | the join: MST order, soft work sharing, start from the seams, empty answer when θ < r₁; one thread | Seams+SWS, Seams-s₁+SWS and SWS in Fig. 6–9 and 13, Tables IV and V |
+| `build_seams` | runs a top-k search per query, then Profile and Select, and writes the seam table and the radius file | the seam table of every join, Fig. 10 and the build cost and coverage in Sec. VII-D |
+| `join` | probes the queries in MST order with soft work sharing, starts from the seams and returns the empty answer when θ < r₁, on one thread | Seams+SWS, Seams-s₁+SWS and SWS in Fig. 6–9 and 13 and in Tables IV and V |
 | `vamana` | builds a dynamic Vamana index with DiskANN and exports it as `.nsg` | the indexes of the update experiments |
-| `updates` | the join while rows of Y are inserted and deleted and new queries arrive, with background (`async`), synchronous (`sync`) or no (`none`) maintenance of the seam table | Fig. 11 and 12 |
+| `updates` | runs the join while rows of Y are inserted and deleted and new queries arrive, and maintains the seam table in the background (`async`), synchronously (`sync`) or not at all (`none`) | Fig. 11 and 12 |
 
 Each source file starts with a comment on its options and outputs.
 
@@ -66,12 +63,11 @@ normalized to unit length; the VIBE vectors already are. SIFT-E has 10⁶ querie
 SIFT1B. `data/thresholds.json` gives θ for every dataset at the mean answer sizes k = 1, 5, 10, 20, 50 and 100.
 
 G_X and G_Y of the static experiments are NSG graphs, built with the reference implementations of NNDescent
-(`efanna_graph`) and NSG (`nsg`) from their upstream repositories on GitHub, for Y and likewise for X:
+([efanna_graph](https://github.com/ZJULearning/efanna_graph)) and NSG ([nsg](https://github.com/ZJULearning/nsg)),
+for Y and likewise for X:
 
     test_nndescent Y.fvecs Y.knn 400 400 12 15 100     # NNDescent: K L iter S R
     test_nsg_index Y.fvecs Y.knn 60 70 500 Y.nsg       # NSG: L R C
-
-SIFT-E and the N-set experiment (its parts of Y and its G_X) use S = 50 instead of 15.
 
 ## Static joins (Fig. 6–10 and 13, Tables IV and V)
 
