@@ -56,17 +56,26 @@ Each source file starts with a comment on its options and outputs.
 
 ## Datasets and graphs
 
-Y and X are the train and test splits of these HDF5 files, converted to `.fvecs`:
+Each dataset is converted to `.fvecs`, with the train split of its HDF5 file as Y and the test split as X:
 
-- ANN-Benchmarks: `sift-128-euclidean`, `gist-960-euclidean`, `glove-200-angular`, `fashion-mnist-784-euclidean`
-- VIBE: `coco-nomic-768-normalized`, `imagenet-align-640-normalized`, `laion-clip-512-normalized`
+- [sift-128-euclidean](http://ann-benchmarks.com/sift-128-euclidean.hdf5) for SIFT
+- [gist-960-euclidean](http://ann-benchmarks.com/gist-960-euclidean.hdf5) for GIST
+- [glove-200-angular](http://ann-benchmarks.com/glove-200-angular.hdf5) for GloVe, with the vectors normalized to unit
+  length
+- [fashion-mnist-784-euclidean](http://ann-benchmarks.com/fashion-mnist-784-euclidean.hdf5) for FMNIST
+- [coco-nomic-768-normalized](https://huggingface.co/datasets/vector-index-bench/vibe/blob/main/coco-nomic-768-normalized.hdf5)
+  for COCO
+- [imagenet-align-640-normalized](https://huggingface.co/datasets/vector-index-bench/vibe/blob/main/imagenet-align-640-normalized.hdf5)
+  for ImageNet
+- [laion-clip-512-normalized](https://huggingface.co/datasets/vector-index-bench/vibe/blob/main/laion-clip-512-normalized.hdf5)
+  for LAION
+- SIFT-E with 10⁶ queries and 10⁶ data vectors sampled from [SIFT1B](http://corpus-texmex.irisa.fr/)
 
-Normalize the GloVe vectors to unit length. SIFT-E samples 10⁶ queries and 10⁶ data vectors from SIFT1B.
 `data/thresholds.json` gives θ for every dataset at the mean answer sizes k = 1, 5, 10, 20, 50 and 100.
 
-G_X and G_Y of the static experiments are NSG graphs, built with the reference implementations of NNDescent
-([efanna_graph](https://github.com/ZJULearning/efanna_graph)) and NSG ([nsg](https://github.com/ZJULearning/nsg)),
-for Y and likewise for X:
+G_X and G_Y of the static experiments are NSG graphs, built with the reference implementations of
+[NNDescent](https://github.com/ZJULearning/efanna_graph) and [NSG](https://github.com/ZJULearning/nsg), for Y and
+likewise for X:
 
     test_nndescent Y.fvecs Y.knn 400 400 12 15 100     # NNDescent: K L iter S R
     test_nsg_index Y.fvecs Y.knn 60 70 500 Y.nsg       # NSG: L R C
