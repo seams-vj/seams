@@ -1,0 +1,123 @@
+Changes to DiskANN 0.7.1 at commit a26f824be5a597b49a7bf33f51ee75121e7c03af (MIT License, see DiskANN-LICENSE next
+to this file). fetch_diskann.sh applies this file with git apply.
+
+1. src/index.cpp, Index::calculate_entry_point(): the medoid is taken over the occupied locations [0, _nd) only.
+   The stock InMemDataStore::calculate_medoid() averages and searches over all capacity() = _max_points +
+   _num_frozen_pts locations, so in a dynamic index with free capacity the free slots, which hold zero vectors, pull
+   the centroid towards the origin and can win the argmin themselves: the frozen start point becomes the origin.
+   The function runs only while the index is built (generate_frozen_point() for a dynamic index, link() for a
+   static one), when the points fill [0, _nd).
+2. src/index.cpp, Index::reserve_location(): taking a location from the free slots clears _data_compacted. After
+   load() an insert takes any free slot while the flag stayed true, so save() skipped compaction and wrote a graph
+   with edges to empty locations.
+3. include/index.h, include/in_mem_data_store.h: read access to the live graph (the start location, a copy of a
+   location's neighbour list taken under that location's lock, the location of a tag, the vector of a location)
+   for searches that run while other threads insert and delete.
+
+diff --git a/include/in_mem_data_store.h b/include/in_mem_data_store.h
+index 0a0a617d..899bf885 100644
+--- a/include/in_mem_data_store.h
++++ b/include/in_mem_data_store.h
+@@ -62,6 +62,12 @@ template <typename data_t> class InMemDataStore : public AbstractDataStore<data_
+ 
+     virtual size_t get_alignment_factor() const override;
+ 
++    // the vector stored at a location, in place (aligned_dim values)
++    const data_t *raw_vector(const location_t location) const
++    {
++        return _data + (size_t)location * _aligned_dim;
++    }
++
+   protected:
+     virtual location_t expand(const location_t new_size) override;
+     virtual location_t shrink(const location_t new_size) override;
+diff --git a/include/index.h b/include/index.h
+index b9bf4f38..ee94b007 100644
+--- a/include/index.h
++++ b/include/index.h
+@@ -186,6 +186,29 @@ template <typename T, typename TagT = uint32_t, typename LabelT = uint32_t> clas
+     // memory should be allocated for vec before calling this function
+     DISKANN_DLLEXPORT int get_vector_by_tag(TagT &tag, T *vec);
+ 
++    // Read access to the live graph for searches that run while other threads insert and delete. A list is copied
++    // under its location's lock (the lock insert_point, inter_insert and process_delete take to change it), so a
++    // reader sees a list as it was before or after one change, never half of it.
++    DISKANN_DLLEXPORT uint32_t start_location() const
++    {
++        return _start;
++    }
++    DISKANN_DLLEXPORT void neighbours_of(uint32_t location, std::vector<uint32_t> &neighbours)
++    {
++        LockGuard guard(_locks[location]);
++        neighbours = _graph_store->get_neighbours(location);
++    }
++    DISKANN_DLLEXPORT int64_t location_of(TagT tag)
++    {
++        std::shared_lock<std::shared_timed_mutex> lock(_tag_lock);
++        auto found = _tag_to_location.find(tag);
++        return found == _tag_to_location.end() ? -1 : (int64_t)found->second;
++    }
++    DISKANN_DLLEXPORT const T *vector_of(uint32_t location) const
++    {
++        return static_cast<InMemDataStore<T> *>(_data_store.get())->raw_vector(location);
++    }
++
+     DISKANN_DLLEXPORT void print_status();
+ 
+     DISKANN_DLLEXPORT void count_nodes_at_bfs_levels();
+diff --git a/src/index.cpp b/src/index.cpp
+index 4b38027d..0a515dcc 100644
+--- a/src/index.cpp
++++ b/src/index.cpp
+@@ -732,9 +732,40 @@ template <typename T, typename TagT, typename LabelT> int Index<T, TagT, LabelT>
+ 
+ template <typename T, typename TagT, typename LabelT> uint32_t Index<T, TagT, LabelT>::calculate_entry_point()
+ {
+-    // REFACTOR TODO: This function does not support multi-threaded calculation of medoid.
+-    // Must revisit if perf is a concern.
+-    return _data_store->calculate_medoid();
++    // medoid of the occupied locations [0, _nd) only; the stock version also counts the zero vectors of free slots
++    const size_t dim = _data_store->get_dims();
++    std::vector<T> point(_data_store->get_aligned_dim());
++    std::vector<double> center(dim, 0.0);
++    for (uint32_t location = 0; location < _nd; location++)
++    {
++        _data_store->get_vector(location, point.data());
++        for (size_t coordinate = 0; coordinate < dim; coordinate++)
++        {
++            center[coordinate] += (double)point[coordinate];
++        }
++    }
++    for (size_t coordinate = 0; coordinate < dim; coordinate++)
++    {
++        center[coordinate] /= (double)_nd;
++    }
++    uint32_t medoid = 0;
++    double best_distance = std::numeric_limits<double>::max();
++    for (uint32_t location = 0; location < _nd; location++)
++    {
++        _data_store->get_vector(location, point.data());
++        double distance = 0;
++        for (size_t coordinate = 0; coordinate < dim; coordinate++)
++        {
++            const double difference = (double)point[coordinate] - center[coordinate];
++            distance += difference * difference;
++        }
++        if (distance < best_distance)
++        {
++            best_distance = distance;
++            medoid = location;
++        }
++    }
++    return medoid;
+ }
+ 
+ template <typename T, typename TagT, typename LabelT> std::vector<uint32_t> Index<T, TagT, LabelT>::get_init_ids()
+@@ -2656,6 +2687,7 @@ template <typename T, typename TagT, typename LabelT> int Index<T, TagT, LabelT>
+ 
+         location = _empty_slots.pop_any();
+         _delete_set->erase(location);
++        _data_compacted = false; // a reused free slot leaves the occupied locations non-consecutive
+     }
+     ++_nd;
+     return location;
