@@ -56,11 +56,13 @@ Each source file starts with a comment on its options and outputs.
 
 ## Datasets and graphs
 
-X and Y are the standard query and data splits (test and train) of ANN-Benchmarks (`sift-128-euclidean`,
-`gist-960-euclidean`, `glove-200-angular`, `fashion-mnist-784-euclidean`) and VIBE (`coco-nomic-768-normalized`,
-`imagenet-align-640-normalized`, `laion-clip-512-normalized`), converted from HDF5 to `.fvecs`. The GloVe vectors are
-normalized to unit length; the VIBE vectors already are. SIFT-E has 10⁶ queries and 10⁶ data vectors sampled from
-SIFT1B. `data/thresholds.json` gives θ for every dataset at the mean answer sizes k = 1, 5, 10, 20, 50 and 100.
+Y and X are the train and test splits of these HDF5 files, converted to `.fvecs`:
+
+- ANN-Benchmarks: `sift-128-euclidean`, `gist-960-euclidean`, `glove-200-angular`, `fashion-mnist-784-euclidean`
+- VIBE: `coco-nomic-768-normalized`, `imagenet-align-640-normalized`, `laion-clip-512-normalized`
+
+Normalize the GloVe vectors to unit length. SIFT-E samples 10⁶ queries and 10⁶ data vectors from SIFT1B.
+`data/thresholds.json` gives θ for every dataset at the mean answer sizes k = 1, 5, 10, 20, 50 and 100.
 
 G_X and G_Y of the static experiments are NSG graphs, built with the reference implementations of NNDescent
 ([efanna_graph](https://github.com/ZJULearning/efanna_graph)) and NSG ([nsg](https://github.com/ZJULearning/nsg)),
@@ -77,11 +79,22 @@ for Y and likewise for X:
              --x-fvecs sift_query.fvecs --x-nsg sift_query.nsg --y-fvecs sift_base.fvecs --y-nsg sift_base.nsg \
              --gt-counts sift_k10.counts --out join_sift_k10
 
-`--eps` is θ, here that of SIFT at k = 10 in `data/thresholds.json`. `build_seams` writes `seams/sift.seams.tsv`,
-`seams/sift.radius.tsv` and `seams/sift.run.json` (counts and seconds per step); the seam table and the radius file
-do not depend on `--threads`. `join` writes
-`queries.tsv` (per query in probe order: answer size, recall, distance computations per phase, microseconds) and
-`summary.json` (pairs, recall over pairs, latency per query, distance computations per phase).
+`--eps` is the threshold θ. The value above is θ of SIFT at k = 10 from `data/thresholds.json`.
+
+`build_seams` writes three files to `seams/`:
+
+- `sift.seams.tsv` is the seam table.
+- `sift.radius.tsv` holds the radius r_L of every query.
+- `sift.run.json` holds the counts and the time of each step.
+
+The seam table and the radius file are the same for any number of threads.
+
+`join` writes two files to `join_sift_k10/`:
+
+- `queries.tsv` has one line per query in probe order with its answer size, recall, distance computations per phase
+  and time in microseconds.
+- `summary.json` has the totals over all queries: pairs, recall over pairs, latency per query and distance
+  computations per phase.
 
 - Seams-s₁+SWS (Fig. 9): add `--m 1`. SWS alone: leave out `--seams`.
 - Fig. 7 varies δ (`--delta` from 0.3 to 0.01); Sec. VII-D varies L (`--L` 64, 128, 256, 1024) and compares r_L in
